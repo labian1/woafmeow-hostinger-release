@@ -1,0 +1,83 @@
+# Photography sources
+
+These are unedited, downloaded photographs from Unsplash, kept in their full composition with `object-fit: contain` in the site. Each source was selected from a photographer account or brand account carrying the Unsplash License; review the original page before reusing an asset outside this website.
+
+- `photo-01` Tamas Pap: https://unsplash.com/photos/dog-kissing-woman-in-black-crew-neck-shirt-Qdt8f7Tcle0
+- `photo-02` Roberto Nickson: https://unsplash.com/photos/woman-sitting-on-sofa-while-holding-food-for-dog-q9nZUFC1nTw
+- `photo-03` Chewy: https://unsplash.com/photos/woman-in-gray-shirt-sitting-on-brown-couch-beside-brown-long-coated-dog-dOTIcvV1Ck4
+- `photo-04` Marc Pell: https://unsplash.com/photos/a-dog-laying-on-the-floor-in-a-living-room-ml7y90P9tiI
+- `photo-05` Brunxs: https://unsplash.com/photos/golden-retriever-lying-on-bed-azsk_6IMT3I
+- `photo-06` Chewy: https://unsplash.com/photos/woman-in-orange-shirt-hugging-white-and-black-short-coated-dog-sdF1Zc6-OQw
+- `photo-07` Chewy: https://unsplash.com/photos/woman-in-white-shirt-sitting-on-black-leather-couch-Kh-QiVqS9o8
+- `photo-08` JESHOOTS.COM: https://unsplash.com/photos/white-and-brown-short-coated-dog-on-white-couch-_kRH3sx-__A
+- `photo-09` Tahiti Spears: https://unsplash.com/photos/a-woman-sitting-on-a-blue-couch-holding-a-dog-jTO5Wu12PGg
+- `photo-10` Leohoho: https://unsplash.com/photos/woman-kissing-brown-short-coated-dog-58MUPAelJm0
+- `photo-11` Chewy: https://unsplash.com/photos/woman-in-purple-and-white-striped-long-sleeve-shirt-sitting-beside-brown-short-coated-dog-Invez0M-FVg
+- `photo-12` Chewy: https://unsplash.com/photos/woman-in-black-and-white-jacket-sitting-on-brown-grass-field-near-white-and-brown-dog-ScEXB6uxOVc
+- `photo-13` Chewy: https://unsplash.com/photos/people-walking-on-brown-field-near-mountain-during-daytime-OHV_IT371vI
+- `photo-14` Chewy: https://unsplash.com/photos/woman-in-black-t-shirt-holding-blue-and-white-ball-RksVP243ytA
+- `photo-15` Chewy: https://unsplash.com/photos/white-short-coat-medium-sized-dog-XPaLy4yt1DY
+- `photo-16` Chewy: https://unsplash.com/photos/2-women-sitting-on-rock-during-daytime-GuCqQn8HQSI
+- `photo-17` Chewy: https://unsplash.com/photos/woman-in-black-jacket-holding-brown-short-coated-dog-oEgpTMQsXT4
+- `photo-18` Diana Parkhouse: https://unsplash.com/photos/man-and-woman-with-white-dog-walking-on-dirt-road-during-daytime-JuzLjNh-S6k
+- `photo-19` Chewy: https://unsplash.com/photos/woman-in-black-tank-top-and-black-pants-standing-on-beach-shore-during-daytime-1KSBnTvMahY
+- `photo-20` Sdf Rahbar: https://unsplash.com/photos/brown-short-coated-dog-covered-with-orange-and-white-blanket-dw7paFI1jnM
+- `photo-21` Irina: https://unsplash.com/photos/pet-dog-laying-on-bed-lSwleWcgPg4
+- `photo-22` Mostafa Agami: https://unsplash.com/photos/a-brown-dog-sleeping-on-top-of-a-white-floor-V1NXgPeM4w4
+- `photo-23` Kojirou Sasaki: https://unsplash.com/photos/a-dog-sleeping-on-a-bed-oYw6FH_Vvyc
+- `photo-24` Samantha Jean: https://unsplash.com/photos/a-brown-and-white-dog-laying-on-top-of-a-couch-bR97ghyap64
+- `photo-25` Jakub Dziubak: https://unsplash.com/photos/golden-retriever-lying-on-blue-textile-wvXG_7ebZ18
+- `photo-26` Andrew Neel: https://unsplash.com/photos/brown-dog-laying-on-white-bed-gOj023vV8CQ
+- `photo-27` Dex Ezekiel: https://unsplash.com/photos/brown-and-black-german-shepherd-lying-on-gray-pet-bed-GUqczWy1bns
+- `photo-28` serjan midili: https://unsplash.com/photos/brown-short-coated-dog-lying-on-white-bed-IHvbODWm4hM
+- `photo-29` Oliver: https://unsplash.com/photos/brown-and-white-short-coated-dog-lying-on-white-textile-tUE5JCPg0Co
+- `photo-30` Jenny Jackson: https://unsplash.com/photos/brown-short-coated-dog-lying-on-gray-couch-FuQiFk1ozO0
+- `photo-31` Connor Home: https://unsplash.com/photos/brown-long-coated-small-dog-lying-on-white-textile-5tauz4uFeDo
+- `photo-32` Dex Ezekiel: https://unsplash.com/photos/a-dog-lying-on-a-bed-r55SD7O0Y28
+- `photo-33` Pauline Loroy: https://unsplash.com/photos/white-and-brown-long-coat-large-dog-U3aF7hgUSrk
+- `photo-34` Mitchell Orr: https://unsplash.com/photos/short-coated-black-dog-in-bokeh-photography-during-daytime-rYHIvfMutvA
+- `photo-35` Linoleum Creative Collective: https://unsplash.com/photos/brown-and-white-long-coated-dog-lying-on-floor-ZQu-3viOINA
+- `photo-36` Berkay Gumustekin: https://unsplash.com/photos/dog-standing-on-pavement-Crj3gU0aJsU
+- `photo-37` Reba Spike: https://unsplash.com/photos/yellow-labrador-retriever-lying-on-floor-FnMh0z-IeBY
+- `photo-38` Jack Plant: https://unsplash.com/photos/a-close-up-of-a-dog-laying-on-a-couch-uXkJ41D5piY
+- `photo-39` Michael: https://unsplash.com/photos/black-short-coat-large-dog-PVlnNm5RHSM
+- `photo-40` Daniele Franchi: https://unsplash.com/photos/dog-lying-on-floor-N-4lwl43-tQ
+- `photo-41` Madalyn Cox: https://unsplash.com/photos/a-dog-laying-on-top-of-a-bed-next-to-a-blanket-IVgU_fyQ7Kg
+- `photo-42` Catherine Heath: https://unsplash.com/photos/black-dog-sofa-inside-living-room-tJzUEQ4HYxI
+- `photo-43` Shayna Douglas: https://unsplash.com/photos/a-dog-sitting-in-the-grass-with-its-tongue-out-rFao8fcvTdY
+- `photo-44` Enis Yavuz: https://unsplash.com/photos/golden-retriever-on-gray-rock-during-daytime-KKtuRtGkDys
+- `photo-45` Justin Aikin: https://unsplash.com/photos/adult-dog-sitting-on-white-sand-near-seashore-KFJuCzJiQYU
+- `photo-46` Faber Leonardo: https://unsplash.com/photos/a-golden-retriever-is-sitting-and-smiling-for-the-camera-CLhFS67ni1c
+- `photo-47` Mitchell Luo: https://unsplash.com/photos/golden-retriever-with-black-collar-f0Y_FDt0xJo
+- `photo-48` Emil Priver: https://unsplash.com/photos/a-golden-retriever-sitting-in-the-middle-of-a-forest-58jPAR2Of8s
+- `photo-49` Victor G: https://unsplash.com/photos/golden-retriever-x5oPmHmY3kQ
+- `photo-50` Helena Lopes: https://unsplash.com/photos/golden-retriever-sitting-on-ground-during-daytime-ueMLnIwlrlE
+- `photo-51` Zach Shup: https://unsplash.com/photos/golden-retriever-sitting-on-green-grass-R6SdnJnLJEg
+- `photo-52` Anya Prygunova: https://unsplash.com/photos/a-person-holding-a-dog-u2H8mUzoF2Q
+- `photo-53` Jonatan Bustos: https://unsplash.com/photos/a-man-and-a-woman-holding-a-dog-in-a-room-P1Ku27zZJDs
+- `photo-54` Karlo Tottoc: https://unsplash.com/photos/a-man-wearing-a-face-mask-sitting-next-to-a-dog-ybZ5hRxaWS4
+- `photo-55` Unsplash image download: https://images.unsplash.com/photo-1511044568932-338cba0ad803
+- `photo-56` Unsplash image download: https://images.unsplash.com/photo-1518791841217-8f162f1e1131
+- `photo-57` Unsplash image download: https://images.unsplash.com/photo-1543852786-1cf6624b9987
+- `photo-58` Unsplash image download: https://images.unsplash.com/photo-1495360010541-f48722b34f7d
+- `photo-59` Unsplash image download: https://images.unsplash.com/photo-1519052537078-e6302a4968d4
+- `photo-60` Unsplash image download: https://images.unsplash.com/photo-1494256997604-768d1f608cac
+- `photo-61` Unsplash image download: https://images.unsplash.com/photo-1573865526739-10659fec78a5
+- `photo-62` Unsplash image download: https://images.unsplash.com/photo-1592194996308-7b43878e84a6
+- `photo-63` Unsplash image download: https://images.unsplash.com/photo-1574158622682-e40e69881006
+- `photo-64` Unsplash image download: https://images.unsplash.com/photo-1529778873920-4da4926a72c2
+- `photo-65` Unsplash image download: https://images.unsplash.com/photo-1513360371669-4adf3dd7dff8
+- `photo-66` Unsplash image download: https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba
+- `photo-67` Unsplash image download: https://images.unsplash.com/photo-1513245543132-31f507417b26
+- `photo-69` Unsplash image download: https://images.unsplash.com/photo-1561948955-570b270e7c36
+- `photo-71` Unsplash image download: https://images.unsplash.com/photo-1615789591457-74a63395c990
+- `photo-73` Unsplash image download: https://images.unsplash.com/photo-1583795128727-6ec3642408f8
+- `photo-74` Unsplash image download: https://images.unsplash.com/photo-1596854407944-bf87f6fdd49e
+- `photo-75` Unsplash image download: https://images.unsplash.com/photo-1548802673-380ab8ebc7b7
+- `photo-76` Unsplash image download: https://images.unsplash.com/photo-1491485880348-85d48a9e5312
+- `photo-77` Unsplash image download: https://images.unsplash.com/photo-1517849845537-4d257902454a
+- `photo-78` Unsplash image download: https://images.unsplash.com/photo-1548199973-03cce0bbc87b
+- `photo-79` Unsplash image download: https://images.unsplash.com/photo-1583511655826-05700d52f4d9
+- `photo-80` Unsplash image download: https://images.unsplash.com/photo-1534361960057-19889db9621e
+- `photo-81` Unsplash image download: https://images.unsplash.com/photo-1569591159212-b02ea8a9f239
+- `photo-82` Unsplash image download: https://images.unsplash.com/photo-1543466835-00a7907e9de1
