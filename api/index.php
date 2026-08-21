@@ -22,6 +22,18 @@ if (is_readable($envFile)) {
 $requestUri = $_SERVER['REQUEST_URI'] ?? '/api';
 $path = parse_url($requestUri, PHP_URL_PATH) ?: '/api';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = ['https://labian1.github.io', 'https://www.woafmeow.com', 'https://woafmeow.com'];
+if (in_array($origin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Vary: Origin');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type');
+}
+if ($method === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 
 function respond(int $status, array $payload): never {
     http_response_code($status);
@@ -122,7 +134,7 @@ function syncBrevo(array $record, string $source = 'woafmeow.com'): void {
     $payload = [
         'email' => $email,
         'attributes' => [
-            'FIRSTNAME' => clean($record['ownerName'] ?? $record['name'] ?? '', 80),
+            'FIRSTNAME' => clean($record['ownerName'] ?? $record['name'] ?? $record['firstName'] ?? $record['contactName'] ?? '', 80),
             'PET_NAME' => clean($record['dogName'] ?? $record['petName'] ?? '', 80),
             'PET_TYPE' => clean($record['species'] ?? '', 20),
             'SOURCE' => $source,
@@ -142,16 +154,92 @@ function syncBrevo(array $record, string $source = 'woafmeow.com'): void {
     curl_close($ch);
 }
 
-function notifyOwner(string $subject, array $record): void {
-    $destination = getenv('FORM_NOTIFICATION_EMAIL') ?: 'robert.luo@woafmeow.com';
-    $lines = [];
-    foreach ($record as $key => $value) {
-        if (is_scalar($value) && trim((string)$value) !== '' && !in_array($key, ['token', 'memberToken'], true)) $lines[] = $key . ': ' . $value;
+function notifyOwner(string $subject, array $record): array {
+    $key = getenv('BREVO_API_KEY') ?: '';
+    $sender = strtolower(clean(getenv('BREVO_SENDER_EMAIL') ?: '', 254));
+    $configuredRecipients = preg_split('/[;,]/', (string)(getenv('FORM_NOTIFICATION_EMAIL') ?: 'robert.luo@woafmeow.com')) ?: [];
+    $recipients = [];
+    foreach ($configuredRecipients as $recipient) {
+        $recipient = strtolower(clean($recipient, 254));
+        if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) $recipients[$recipient] = ['email' => $recipient];
     }
-    @mail($destination, $subject, implode("\n", $lines), "From: WoafMeow <no-reply@woafmeow.com>\r\n");
+    if ($key === '') return ['status' => 'skipped', 'detail' => 'BREVO_API_KEY is not configured.'];
+    if (!filter_var($sender, FILTER_VALIDATE_EMAIL)) return ['status' => 'skipped', 'detail' => 'BREVO_SENDER_EMAIL is not configured.'];
+    if (!$recipients) return ['status' => 'skipped', 'detail' => 'FORM_NOTIFICATION_EMAIL has no valid recipient.'];
+    if (!function_exists('curl_init')) return ['status' => 'failed', 'detail' => 'The PHP cURL extension is unavailable.'];
+
+    $allowed = [
+        'type', 'email', 'ownerName', 'name', 'firstName', 'contactName', 'organization', 'requestType',
+        'serviceType', 'coverage', 'sessionTitle', 'petName', 'dogName', 'species', 'action', 'topic',
+        'collection', 'timing', 'city', 'region', 'country', 'status', 'result', 'postId',
+        'conversationId', 'matchId', 'hasMedia', 'createdAt',
+    ];
+    $rows = '';
+    foreach ($allowed as $field) {
+        $value = $record[$field] ?? '';
+        if (!is_scalar($value) || trim((string)$value) === '') continue;
+        $label = htmlspecialchars($field, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $display = htmlspecialchars(clean($value, 500), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $rows .= '<tr><th align="left" style="padding:6px 12px 6px 0">' . $label . '</th><td style="padding:6px 0">' . $display . '</td></tr>';
+    }
+    $payload = [
+        'sender' => ['email' => $sender, 'name' => 'WoafMeow Forms'],
+        'to' => array_values($recipients),
+        'subject' => clean($subject, 180),
+        'htmlContent' => '<h2>New WoafMeow submission</h2>' . ($rows !== '' ? '<table>' . $rows . '</table>' : '<p>Open the private operations dashboard for details.</p>'),
+    ];
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['api-key: ' . $key, 'content-type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+    ]);
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    if ($response === false || $status < 200 || $status >= 300) {
+        return ['status' => 'failed', 'detail' => $error !== '' ? clean($error, 300) : 'Brevo SMTP returned HTTP ' . $status . '.'];
+    }
+    return ['status' => 'sent', 'detail' => 'Brevo accepted the owner notification.'];
 }
 
-function saveSubmission(string $type, array $record): void {
+function sendGuideEmail(string $email): array {
+    $key = getenv('BREVO_API_KEY') ?: '';
+    $sender = strtolower(clean(getenv('BREVO_SENDER_EMAIL') ?: '', 254));
+    $email = strtolower(clean($email, 254));
+    if ($key === '') return ['status' => 'skipped', 'detail' => 'BREVO_API_KEY is not configured.'];
+    if (!filter_var($sender, FILTER_VALIDATE_EMAIL)) return ['status' => 'skipped', 'detail' => 'BREVO_SENDER_EMAIL is not configured.'];
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return ['status' => 'failed', 'detail' => 'The recipient email is invalid.'];
+    if (!function_exists('curl_init')) return ['status' => 'failed', 'detail' => 'The PHP cURL extension is unavailable.'];
+    $guideUrl = 'https://labian1.github.io/guide/';
+    $payload = [
+        'sender' => ['email' => $sender, 'name' => 'WoafMeow'],
+        'to' => [['email' => $email]],
+        'subject' => 'Your complete Senior Dog Care Guide',
+        'htmlContent' => '<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#2c2521"><h1 style="color:#17382d">Your Senior Dog Care Guide</h1><p>Use this guide to turn a change you noticed into a clearer next step.</p><ul><li>Movement and stiffness</li><li>Sleep and nighttime changes</li><li>Eating, drinking and bathroom changes</li><li>Daily life, comfort and call-sooner signs</li></ul><p><a href="' . $guideUrl . '" style="display:inline-block;padding:14px 20px;background:#a44b2a;color:#fff;text-decoration:none;border-radius:6px">Open the complete guide</a></p><p>WoafMeow provides educational guidance. Sudden or severe signs need veterinary care.</p></div>',
+    ];
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['api-key: ' . $key, 'content-type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+    ]);
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    if ($response === false || $status < 200 || $status >= 300) {
+        return ['status' => 'failed', 'detail' => $error !== '' ? clean($error, 300) : 'Brevo SMTP returned HTTP ' . $status . '.'];
+    }
+    return ['status' => 'sent', 'detail' => 'Brevo accepted the Senior Dog Care Guide email.'];
+}
+
+function saveSubmission(string $type, array $record, bool $sendOwnerNotification = true): void {
     $record['id'] = $record['id'] ?? id('submission');
     $record['type'] = $type;
     $record['createdAt'] = $record['createdAt'] ?? gmdate('c');
@@ -159,7 +247,34 @@ function saveSubmission(string $type, array $record): void {
     $rows[] = $record;
     saveRows('submissions', $rows);
     syncBrevo($record, 'woafmeow.com/' . $type);
-    notifyOwner('New WoafMeow ' . str_replace('-', ' ', $type), $record);
+    $delivery = $sendOwnerNotification
+        ? notifyOwner('New WoafMeow ' . str_replace('-', ' ', $type), $record)
+        : ['status' => 'suppressed', 'detail' => 'Owner notification already sent for this workflow.'];
+    $log = readRows('notification-log');
+    $log[] = [
+        'id' => id('notification'),
+        'submissionId' => $record['id'],
+        'type' => $type,
+        'email' => strtolower(clean($record['email'] ?? '', 254)),
+        'status' => $delivery['status'],
+        'detail' => $delivery['detail'],
+        'createdAt' => gmdate('c'),
+    ];
+    if (count($log) > 5000) $log = array_slice($log, -5000);
+    saveRows('notification-log', $log);
+}
+
+function saveMemberAction(string $type, array $owner, array $pet = [], array $properties = [], bool $sendOwnerNotification = true): void {
+    $record = [
+        'email' => strtolower(clean($owner['email'] ?? '', 254)),
+        'ownerName' => clean($owner['ownerName'] ?? $owner['firstName'] ?? '', 80),
+        'petName' => clean($pet['dogName'] ?? $pet['petName'] ?? '', 80),
+        'species' => clean($pet['species'] ?? '', 20),
+    ];
+    foreach ($properties as $field => $value) {
+        if (is_scalar($value)) $record[clean($field, 60)] = clean($value, 500);
+    }
+    saveSubmission($type, $record, $sendOwnerNotification);
 }
 
 function topicFrom(string $question): string {
@@ -378,6 +493,122 @@ function defaultCommunity(): array {
     ];
 }
 
+function communityRows(): array {
+    $rowsById = [];
+    foreach (defaultCommunity() as $post) $rowsById[$post['id']] = $post;
+    foreach (readRows('community') as $post) {
+        $postId = clean($post['id'] ?? '', 100);
+        if ($postId !== '') $rowsById[$postId] = $post;
+    }
+    return array_values($rowsById);
+}
+
+function meetupContextCount(string $memberId, string $petId): int {
+    $checkins = count(array_filter(readRows('checkins'), fn($item) => ($item['memberId'] ?? '') === $memberId && ($item['dogId'] ?? '') === $petId));
+    $lessons = count(array_filter(readRows('conversations'), fn($item) => ($item['memberId'] ?? '') === $memberId && ($item['dogId'] ?? '') === $petId && ($item['status'] ?? '') !== 'intake'));
+    return $checkins + $lessons;
+}
+
+function meetupProfile(string $memberId, string $petId): ?array {
+    foreach (readRows('meetup-profiles') as $profile) {
+        if (($profile['memberId'] ?? '') === $memberId && ($profile['petId'] ?? '') === $petId) return $profile;
+    }
+    return null;
+}
+
+function meetupProfileResponse(?array $profile): ?array {
+    if (!$profile) return null;
+    $fields = ['id', 'petId', 'city', 'region', 'country', 'radiusMiles', 'mixedSpeciesOk', 'sizeBand', 'energyLevel', 'temperament', 'mobilityNeeds', 'playStyle', 'availability', 'venuePreference', 'ownerGoal', 'safetyNotes', 'active'];
+    $result = [];
+    foreach ($fields as $field) $result[$field] = $profile[$field] ?? ($field === 'mixedSpeciesOk' || $field === 'active' ? false : '');
+    return $result;
+}
+
+function meetupMatches(array $profile, string $memberId): array {
+    $profiles = [];
+    foreach (readRows('meetup-profiles') as $item) $profiles[$item['id'] ?? ''] = $item;
+    $pets = [];
+    foreach (readRows('pets') as $item) $pets[$item['id'] ?? ''] = $item;
+    $members = [];
+    foreach (readRows('members') as $item) $members[$item['id'] ?? ''] = $item;
+    $feedback = readRows('meetup-feedback');
+    $results = [];
+    foreach (array_reverse(readRows('meetup-matches')) as $match) {
+        $profileId = $profile['id'] ?? '';
+        if (($match['profileAId'] ?? '') !== $profileId && ($match['profileBId'] ?? '') !== $profileId) continue;
+        $otherId = ($match['profileAId'] ?? '') === $profileId ? ($match['profileBId'] ?? '') : ($match['profileAId'] ?? '');
+        $other = $profiles[$otherId] ?? null;
+        $pet = $other ? ($pets[$other['petId'] ?? ''] ?? null) : null;
+        $owner = $other ? ($members[$other['memberId'] ?? ''] ?? null) : null;
+        if (!$other || !$pet || !$owner) continue;
+        $ownerName = clean($owner['ownerName'] ?? $owner['firstName'] ?? 'their person', 80);
+        $submitted = count(array_filter($feedback, fn($item) => ($item['matchId'] ?? '') === ($match['id'] ?? '') && ($item['memberId'] ?? '') === $memberId)) > 0;
+        $results[] = [
+            'id' => $match['id'], 'score' => (int)($match['score'] ?? 0), 'reasons' => $match['reasons'] ?? [],
+            'status' => $match['status'] ?? 'suggested', 'createdAt' => $match['createdAt'] ?? '',
+            'petName' => $pet['dogName'] ?? 'A nearby pet', 'species' => $pet['species'] ?? '', 'breed' => $pet['breed'] ?? '',
+            'city' => $other['city'] ?? '', 'region' => $other['region'] ?? '',
+            'ownerFirstName' => explode(' ', $ownerName)[0] ?: 'their person', 'feedbackSubmitted' => $submitted,
+        ];
+        if (count($results) >= 12) break;
+    }
+    return $results;
+}
+
+function meetupCandidateScore(array $self, array $candidate): array {
+    $sameCity = strtolower((string)$self['city']) === strtolower((string)$candidate['city']);
+    $score = $sameCity ? 40 : 25;
+    $reasons = [$sameCity ? 'Both families are in ' . $self['city'] . '.' : 'Both families are in ' . $self['region'] . '.'];
+    if (($self['availability'] ?? '') === ($candidate['availability'] ?? '')) { $score += 20; $reasons[] = 'Your available time matches.'; }
+    if (($self['energyLevel'] ?? '') === ($candidate['energyLevel'] ?? '')) { $score += 15; $reasons[] = 'The pets have a similar energy level.'; }
+    if (($self['playStyle'] ?? '') === ($candidate['playStyle'] ?? '')) { $score += 10; $reasons[] = 'Their preferred social style matches.'; }
+    if (($self['ownerGoal'] ?? '') === ($candidate['ownerGoal'] ?? '')) { $score += 10; $reasons[] = 'The owners want the same kind of connection.'; }
+    if (($self['sizeBand'] ?? '') === ($candidate['sizeBand'] ?? '')) $score += 5;
+    return ['score' => min(100, $score), 'reasons' => array_slice($reasons, 0, 4)];
+}
+
+function communityResearchBrief(string $query, string $species): array {
+    $petLabel = $species === 'cat' ? 'cat' : ($species === 'dog' ? 'dog' : 'pet');
+    if (preg_match('/food|diet|meal|nutrition|treat|appetite/i', $query)) {
+        return [
+            'title' => 'Food and routine brief',
+            'prompts' => [
+                "Name your {$petLabel}'s age, current food, medication, and the exact routine change.",
+                'Separate a changed appetite from a changed food preference, timing, bowl location, or feeding setup.',
+                'Ask your veterinary team what needs assessment before making a major diet change.',
+            ],
+        ];
+    }
+    if (preg_match('/bed|sleep|rest|night|settle|pacing/i', $query)) {
+        return [
+            'title' => 'Rest and settling brief',
+            'prompts' => [
+                'Describe the sleep location, the first wake-up, and the moment settling becomes difficult.',
+                'Note whether movement, bathroom trips, temperature, noise, or a new routine changes the night.',
+                'Keep one short ordinary video if it is safe and useful for a veterinary conversation.',
+            ],
+        ];
+    }
+    if (preg_match('/toy|play|walk|move|mobility|stair|jump|exercise/i', $query)) {
+        return [
+            'title' => 'Movement and engagement brief',
+            'prompts' => [
+                'Start with the first rise, first steps, or first choice to join an activity.',
+                'Note what your pet avoids, how long recovery takes, and what makes the route easier.',
+                'Ask whether a new or worsening change should be assessed before changing activity.',
+            ],
+        ];
+    }
+    return [
+        'title' => 'Care question brief',
+        'prompts' => [
+            "Describe the ordinary routine for your {$petLabel}, then name the first detail that changed.",
+            'Add when it happens, how often it repeats, and what seems to help.',
+            'Keep the question specific enough for another owner or veterinary team to understand the real moment.',
+        ],
+    ];
+}
+
 function productCatalog(): array {
     return [
         'living-memorial-tree' => ['slug' => 'living-memorial-tree', 'title' => 'Living Memorial Tree', 'category' => 'Living memorials', 'priceCents' => 7900, 'imageUrl' => '/media/store/products/memorial-tree.jpg', 'shortDescription' => 'A living tribute with a personalized certificate.', 'details' => ['Tree-planting contribution', 'Personalized digital certificate', 'Gift-ready remembrance note']],
@@ -392,28 +623,51 @@ function productCatalog(): array {
     ];
 }
 
+$retiredCommerceApiPaths = [
+    '/api/products',
+    '/api/store-checkout',
+    '/api/vendor-application',
+    '/api/membership-interest',
+    '/api/membership-checkout',
+    '/api/stripe-webhook',
+];
+if (in_array($path, $retiredCommerceApiPaths, true)) {
+    respond(410, ['error' => 'This commerce service has been retired. WoafMeow now focuses on education, care connections, Wednesday matching, and memorial-tree updates.']);
+}
+
 // Account and pet profiles.
 if ($path === '/api/enroll' && $method === 'POST') {
     $input = inputBody();
-    foreach (['ownerName', 'email', 'city', 'region', 'dogName', 'species', 'breed', 'ageYears'] as $field) {
+    foreach (['ownerName', 'email', 'dogName', 'species', 'ageYears'] as $field) {
         if (clean($input[$field] ?? '') === '') respond(422, ['error' => 'Please complete every required account field.']);
     }
     if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) respond(422, ['error' => 'Enter a valid email address.']);
     if (empty($input['consent'])) respond(422, ['error' => 'Please confirm care-account updates.']);
-    $memberId = id('member'); $petId = id('pet'); $token = bin2hex(random_bytes(24));
+    $email = strtolower(clean($input['email'], 254));
+    $members = readRows('members'); $existingIndex = null; $existingMember = null;
+    foreach ($members as $index => $member) {
+        if (strtolower(clean($member['email'] ?? '', 254)) === $email) { $existingIndex = $index; $existingMember = $member; break; }
+    }
+    $memberId = $existingMember['id'] ?? id('member');
+    $pets = readRows('pets');
+    $owned = array_values(array_filter($pets, fn($pet) => ($pet['memberId'] ?? '') === $memberId));
+    if (count($owned) >= 5) respond(409, ['error' => 'This care account already has five pet profiles.']);
+    $petId = id('pet'); $token = bin2hex(random_bytes(24)); $now = gmdate('c');
     $record = [
         'id' => $memberId, 'token' => $token, 'dogId' => $petId,
-        'ownerName' => clean($input['ownerName'], 80), 'email' => strtolower(clean($input['email'], 254)),
+        'ownerName' => clean($input['ownerName'], 80), 'email' => $email,
         'city' => clean($input['city'], 80), 'region' => clean($input['region'], 100),
-        'location' => clean(($input['city'] ?? '') . ', ' . ($input['region'] ?? ''), 180),
+        'location' => clean(implode(', ', array_filter([$input['city'] ?? '', $input['region'] ?? ''])), 180),
         'dogName' => clean($input['dogName'], 80), 'species' => clean($input['species'], 20),
-        'breed' => clean($input['breed'], 120), 'ageYears' => clean($input['ageYears'], 10),
+        'breed' => clean($input['breed'] ?? '', 120), 'ageYears' => clean($input['ageYears'], 10),
         'weightLbs' => clean($input['weightLbs'] ?? '', 10), 'focus' => clean($input['focus'] ?? 'not-sure', 50),
         'healthConditions' => clean($input['healthConditions'] ?? '', 700), 'medications' => clean($input['medications'] ?? '', 700),
-        'routineNotes' => clean($input['routineNotes'] ?? '', 700), 'plan' => 'free', 'createdAt' => gmdate('c'), 'source' => 'woafmeow.com',
+        'routineNotes' => clean($input['routineNotes'] ?? '', 700), 'createdAt' => $existingMember['createdAt'] ?? $now,
+        'updatedAt' => $now, 'source' => 'woafmeow.com',
     ];
-    $members = readRows('members'); $members[] = $record; saveRows('members', $members);
-    $pets = readRows('pets'); $pets[] = ['id' => $petId, 'memberId' => $memberId] + $record; saveRows('pets', $pets);
+    if ($existingIndex === null) $members[] = $record; else $members[$existingIndex] = $record;
+    saveRows('members', $members);
+    $pets[] = ['id' => $petId, 'memberId' => $memberId] + $record; saveRows('pets', $pets);
     saveSubmission('website-account', $record);
     respond(201, ['member' => $record, 'message' => $record['dogName'] . "'s account is ready."]);
 }
@@ -428,10 +682,12 @@ if ($path === '/api/pets' && $method === 'POST') {
     $input = inputBody(); $owner = requireMember($input);
     $pets = readRows('pets');
     $owned = array_values(array_filter($pets, fn($pet) => ($pet['memberId'] ?? '') === $owner['id']));
-    if (($owner['plan'] ?? 'free') === 'free' && count($owned) >= 1) respond(403, ['error' => 'Free accounts include one pet. Care+ supports multiple pets.']);
-    foreach (['dogName', 'species', 'breed', 'ageYears'] as $field) if (clean($input[$field] ?? '') === '') respond(422, ['error' => 'Complete the pet name, species, breed or type, and age.']);
-    $pet = ['id' => id('pet'), 'memberId' => $owner['id'], 'dogName' => clean($input['dogName'], 80), 'species' => clean($input['species'], 20), 'breed' => clean($input['breed'], 120), 'ageYears' => clean($input['ageYears'], 10), 'weightLbs' => clean($input['weightLbs'] ?? '', 10), 'focus' => clean($input['focus'] ?? 'not-sure', 50), 'healthConditions' => clean($input['healthConditions'] ?? '', 700), 'medications' => clean($input['medications'] ?? '', 700), 'routineNotes' => clean($input['routineNotes'] ?? '', 700), 'createdAt' => gmdate('c')];
-    $pets[] = $pet; saveRows('pets', $pets); respond(201, ['pet' => $pet, 'message' => $pet['dogName'] . ' was added.']);
+    if (count($owned) >= 5) respond(403, ['error' => 'Each care account supports up to five pet profiles.']);
+    foreach (['dogName', 'species', 'ageYears'] as $field) if (clean($input[$field] ?? '') === '') respond(422, ['error' => 'Complete the pet name, species, and age.']);
+    $pet = ['id' => id('pet'), 'memberId' => $owner['id'], 'dogName' => clean($input['dogName'], 80), 'species' => clean($input['species'], 20), 'breed' => clean($input['breed'] ?? '', 120), 'ageYears' => clean($input['ageYears'], 10), 'weightLbs' => clean($input['weightLbs'] ?? '', 10), 'focus' => clean($input['focus'] ?? 'not-sure', 50), 'healthConditions' => clean($input['healthConditions'] ?? '', 700), 'medications' => clean($input['medications'] ?? '', 700), 'routineNotes' => clean($input['routineNotes'] ?? '', 700), 'createdAt' => gmdate('c')];
+    $pets[] = $pet; saveRows('pets', $pets);
+    saveMemberAction('pet-profile-added', $owner, $pet, ['action' => 'pet profile added']);
+    respond(201, ['pet' => $pet, 'message' => $pet['dogName'] . ' was added.']);
 }
 
 if ($path === '/api/pets' && $method === 'PATCH') {
@@ -446,6 +702,7 @@ if ($path === '/api/pets' && $method === 'PATCH') {
         foreach (['dogName', 'species', 'breed', 'ageYears', 'weightLbs', 'focus', 'healthConditions', 'medications', 'routineNotes', 'profileMediaId'] as $field) if (isset($pet[$field])) $owner[$field] = $pet[$field];
         replaceRow('members', $owner['id'], $owner);
     }
+    saveMemberAction('pet-profile-updated', $owner, $pet, ['action' => 'pet profile updated']);
     respond(200, ['pet' => $pet, 'message' => $pet['dogName'] . "'s profile was updated."]);
 }
 
@@ -453,7 +710,7 @@ if ($path === '/api/pets' && $method === 'PATCH') {
 if ($path === '/api/care-chat' && $method === 'GET') {
     $owner = requireMember();
     $conversationId = clean($_GET['conversationId'] ?? '', 100);
-    $items = array_values(array_filter(readRows('conversations'), fn($item) => ($item['memberId'] ?? '') === $owner['id']));
+    $items = array_values(array_filter(readRows('conversations'), fn($item) => ($item['memberId'] ?? '') === $owner['id'] && ($item['status'] ?? '') !== 'intake'));
     if ($conversationId) {
         foreach ($items as $item) if (($item['id'] ?? '') === $conversationId) respond(200, $item);
         respond(404, ['error' => 'We could not reopen that lesson.']);
@@ -468,20 +725,34 @@ if ($path === '/api/care-chat' && $method === 'POST') {
     if (!$pet) respond(404, ['error' => 'We could not find that pet profile.']);
     $question = clean($input['question'] ?? '', 900); $stage = clean($input['stage'] ?? 'context', 20); $privacy = clean($input['privacy'] ?? 'public', 10) === 'private' ? 'private' : 'public';
     if (strlen($question) < 8) respond(422, ['error' => 'Tell us the change you noticed in one short sentence.']);
-    $topic = topicFrom($question);
-    if ($stage === 'context') {
-        respond(200, ['needsContext' => true, 'question' => $question, 'privacy' => $privacy, 'intake' => ['intro' => "I’ll ask only what helps make this specific to " . $pet['dogName'] . '.', 'questions' => intakeQuestions($topic, $pet)]]);
-    }
-    $rows = readRows('conversations');
+    $topic = topicFrom($question); $rows = readRows('conversations');
     $today = gmdate('Y-m-d');
-    $used = count(array_filter($rows, fn($item) => ($item['memberId'] ?? '') === $owner['id'] && str_starts_with((string)($item['createdAt'] ?? ''), $today)));
-    $limit = ($owner['plan'] ?? 'free') === 'free' ? 2 : 50;
+    $used = count(array_filter($rows, fn($item) => ($item['memberId'] ?? '') === $owner['id'] && ($item['status'] ?? '') !== 'intake' && str_starts_with((string)($item['createdAt'] ?? ''), $today)));
+    $limit = 20;
     if ($used >= $limit) {
-        respond(429, ['error' => $limit === 2 ? 'You have used today’s two free lessons. Your lesson limit refreshes tomorrow.' : 'You have reached today’s lesson limit.', 'quota' => ['used' => $used, 'remaining' => 0, 'limit' => $limit]]);
+        respond(429, ['error' => 'You have reached today’s care-lesson safety limit. Please continue tomorrow.', 'quota' => ['used' => $used, 'remaining' => 0, 'limit' => $limit]]);
+    }
+    $intakeKey = 'intake:' . hash('sha256', $question); $intakeIndex = null; $intake = null;
+    foreach ($rows as $index => $item) {
+        if (($item['memberId'] ?? '') === $owner['id'] && ($item['dogId'] ?? '') === $petId && ($item['title'] ?? '') === $intakeKey && ($item['status'] ?? '') === 'intake') {
+            $intakeIndex = $index; $intake = $item; break;
+        }
+    }
+    if ($stage === 'context') {
+        if ($intakeIndex === null) {
+            $now = gmdate('c');
+            $intake = ['id' => id('intake'), 'memberId' => $owner['id'], 'dogId' => $petId, 'title' => $intakeKey, 'topic' => $topic, 'privacy' => $privacy, 'status' => 'intake', 'createdAt' => $now, 'updatedAt' => $now];
+            $rows[] = $intake; saveRows('conversations', $rows);
+            saveMemberAction('care-question-started', $owner, $pet, ['action' => 'care question started', 'topic' => topicName($topic), 'status' => $privacy]);
+        }
+        respond(200, ['needsContext' => true, 'question' => $question, 'privacy' => $privacy, 'intakeId' => $intake['id'], 'intake' => ['intro' => "I’ll ask only what helps make this specific to " . $pet['dogName'] . '.', 'questions' => intakeQuestions($topic, $pet)], 'quota' => ['used' => $used, 'remaining' => max(0, $limit - $used), 'limit' => $limit]]);
     }
     $context = is_array($input['context'] ?? null) ? $input['context'] : [];
-    $conversation = ['id' => id('conversation'), 'memberId' => $owner['id'], 'dogId' => $petId, 'question' => $question, 'privacy' => $privacy, 'answer' => buildLesson($pet, $question, $topic, $context), 'published' => false, 'createdAt' => gmdate('c')];
-    $rows[] = $conversation; saveRows('conversations', $rows); $used++;
+    $now = gmdate('c');
+    $conversation = ['id' => $intake['id'] ?? id('conversation'), 'memberId' => $owner['id'], 'dogId' => $petId, 'question' => $question, 'privacy' => $privacy, 'answer' => buildLesson($pet, $question, $topic, $context), 'published' => false, 'status' => 'active', 'createdAt' => $now, 'updatedAt' => $now];
+    if ($intakeIndex === null) $rows[] = $conversation; else $rows[$intakeIndex] = $conversation;
+    saveRows('conversations', $rows); $used++;
+    saveMemberAction('care-lesson-created', $owner, $pet, ['action' => 'care lesson created', 'topic' => topicName($topic), 'status' => $privacy], $intakeIndex === null);
     respond(201, $conversation + ['conversationId' => $conversation['id'], 'quota' => ['used' => $used, 'remaining' => max(0, $limit - $used), 'limit' => $limit]]);
 }
 
@@ -499,11 +770,80 @@ if ($path === '/api/care-chat-publish' && $method === 'POST') {
     $posts = readRows('community');
     $posts[] = ['id' => id('post'), 'conversationId' => $conversationId, 'memberId' => $owner['id'], 'dogName' => $pet['dogName'] ?? 'A pet family', 'topic' => topicName($conversation['answer']['topic'] ?? 'general'), 'body' => $conversation['question'], 'createdAt' => gmdate('c'), 'helpfulCount' => 0, 'saveCount' => 0, 'replies' => [], 'media' => []];
     saveRows('community', $posts);
+    saveMemberAction('care-lesson-published', $owner, $pet ?: [], ['action' => 'care lesson published', 'conversationId' => $conversationId, 'topic' => topicName($conversation['answer']['topic'] ?? 'general')]);
     respond(201, ['message' => 'Your lesson is now visible in the public Care Circle.']);
 }
 
+if ($path === '/api/circles' && $method === 'GET') {
+    $owner = authenticatedMember();
+    $memberships = readRows('care-circle-group-members');
+    $groups = [];
+    $pendingGroups = [];
+    foreach (readRows('care-circle-groups') as $group) {
+        $memberCount = count(array_filter($memberships, fn($item) => ($item['groupId'] ?? '') === ($group['id'] ?? '')));
+        $role = '';
+        if ($owner) {
+            foreach ($memberships as $membership) {
+                if (($membership['groupId'] ?? '') === ($group['id'] ?? '') && ($membership['memberId'] ?? '') === $owner['id']) {
+                    $role = clean($membership['role'] ?? '', 20);
+                    break;
+                }
+            }
+        }
+        if (($group['status'] ?? '') === 'approved') {
+            $groups[] = $group + ['memberCount' => $memberCount, 'isJoined' => $role !== '', 'isHost' => $role === 'host'];
+        } elseif ($owner && ($group['hostMemberId'] ?? '') === $owner['id'] && ($group['status'] ?? '') === 'pending') {
+            $pendingGroups[] = $group;
+        }
+    }
+    usort($groups, fn($a, $b) => strcmp((string)($b['createdAt'] ?? ''), (string)($a['createdAt'] ?? '')));
+    usort($pendingGroups, fn($a, $b) => strcmp((string)($b['createdAt'] ?? ''), (string)($a['createdAt'] ?? '')));
+    respond(200, ['groups' => $groups, 'pendingGroups' => array_slice($pendingGroups, 0, 12)]);
+}
+
+if ($path === '/api/circles' && $method === 'POST') {
+    $input = inputBody(); $owner = requireMember($input); $petId = clean($input['dogId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(404, ['error' => 'We could not find that pet profile.']);
+    $kind = clean($input['kind'] ?? '', 12); $now = gmdate('c');
+    if ($kind === 'create') {
+        $title = clean($input['title'] ?? '', 110); $description = clean($input['description'] ?? '', 560);
+        $focus = clean($input['focus'] ?? '', 32); $species = strtolower(clean($input['species'] ?? '', 12)); $cadence = clean($input['cadence'] ?? '', 20);
+        if (strlen($title) < 8) respond(422, ['error' => 'Give your circle a clear, welcoming name.']);
+        if (strlen($description) < 32) respond(422, ['error' => 'Add a little context so the right owners know why this circle could help.']);
+        if (!in_array($focus, ['mobility', 'sleep', 'appetite', 'comfort', 'recovery', 'quality-of-life', 'daily-routine', 'vet-visit'], true)) respond(422, ['error' => 'Choose the part of care this circle is centered on.']);
+        if (!in_array($species, ['dog', 'cat', 'all'], true)) respond(422, ['error' => 'Choose whether this circle is for older dogs, cats, or both.']);
+        if (!in_array($cadence, ['weekly', 'twice-monthly', 'as-needed'], true)) respond(422, ['error' => 'Choose how often the group hopes to check in.']);
+        $group = [
+            'id' => id('circle'), 'hostMemberId' => $owner['id'], 'hostDogProfileId' => $petId,
+            'hostDogName' => $pet['dogName'], 'title' => $title, 'description' => $description,
+            'focus' => $focus, 'species' => $species, 'cadence' => $cadence,
+            'status' => 'pending', 'createdAt' => $now, 'updatedAt' => $now,
+        ];
+        $groups = readRows('care-circle-groups'); $groups[] = $group; saveRows('care-circle-groups', $groups);
+        $memberships = readRows('care-circle-group-members');
+        $memberships[] = ['groupId' => $group['id'], 'memberId' => $owner['id'], 'role' => 'host', 'createdAt' => $now];
+        saveRows('care-circle-group-members', $memberships);
+        saveMemberAction('care-circle-host-application', $owner, $pet, ['action' => 'host application saved', 'topic' => $focus, 'status' => 'pending']);
+        respond(201, ['message' => 'Your Care Circle is saved. We will check the invitation for clarity and a welcoming purpose before opening it to other owners.', 'group' => ['id' => $group['id'], 'title' => $title, 'status' => 'pending']]);
+    }
+    if ($kind === 'join') {
+        $groupId = clean($input['groupId'] ?? '', 100); $group = null;
+        foreach (readRows('care-circle-groups') as $candidate) if (($candidate['id'] ?? '') === $groupId && ($candidate['status'] ?? '') === 'approved') { $group = $candidate; break; }
+        if (!$group) respond(404, ['error' => 'That Care Circle is no longer available.']);
+        $memberships = readRows('care-circle-group-members'); $joined = false;
+        foreach ($memberships as $membership) if (($membership['groupId'] ?? '') === $groupId && ($membership['memberId'] ?? '') === $owner['id']) { $joined = true; break; }
+        if (!$joined) {
+            $memberships[] = ['groupId' => $groupId, 'memberId' => $owner['id'], 'role' => 'member', 'createdAt' => $now];
+            saveRows('care-circle-group-members', $memberships);
+        }
+        saveMemberAction('care-circle-joined', $owner, $pet, ['action' => $joined ? 'join confirmed' : 'circle joined', 'result' => $groupId]);
+        respond(200, ['message' => 'You are part of ' . $group['title'] . '. You can now share an update with this circle.']);
+    }
+    respond(422, ['error' => 'We could not understand that Care Circle action.']);
+}
+
 if ($path === '/api/community' && $method === 'GET') {
-    $posts = array_merge(readRows('community'), defaultCommunity());
+    $posts = communityRows();
     usort($posts, fn($a, $b) => strcmp((string)($b['createdAt'] ?? ''), (string)($a['createdAt'] ?? '')));
     respond(200, ['posts' => $posts]);
 }
@@ -516,16 +856,27 @@ if ($path === '/api/community' && $method === 'POST') {
         if (strlen($text) < 8) respond(422, ['error' => 'Add enough detail to make the reply useful.']);
         $posts = readRows('community'); $postId = clean($input['postId'] ?? '', 100); $found = false;
         foreach ($posts as $index => $post) if (($post['id'] ?? '') === $postId) { $post['replies'][] = ['dogName' => $pet['dogName'] . '’s family', 'body' => $text, 'createdAt' => gmdate('c')]; $posts[$index] = $post; $found = true; }
+        if (!$found) {
+            foreach (defaultCommunity() as $post) {
+                if (($post['id'] ?? '') !== $postId) continue;
+                $post['replies'][] = ['dogName' => $pet['dogName'] . '’s family', 'body' => $text, 'createdAt' => gmdate('c')];
+                $posts[] = $post; $found = true; break;
+            }
+        }
         if (!$found) respond(404, ['error' => 'That public lesson is no longer available.']);
-        saveRows('community', $posts); respond(201, ['message' => 'Your reply is now part of this conversation.']);
+        saveRows('community', $posts);
+        saveMemberAction('care-circle-reply', $owner, $pet, ['action' => 'reply added', 'postId' => $postId]);
+        respond(201, ['message' => 'Your reply is now part of this conversation.']);
     }
     if (strlen($text) < 20) respond(422, ['error' => 'Add one concrete moment so another family can understand.']);
     $post = ['id' => id('post'), 'memberId' => $owner['id'], 'dogName' => $pet['dogName'] . '’s family', 'topic' => clean($input['topic'] ?? 'Daily routine', 50), 'body' => $text, 'createdAt' => gmdate('c'), 'helpfulCount' => 0, 'saveCount' => 0, 'replies' => [], 'media' => []];
-    $posts = readRows('community'); $posts[] = $post; saveRows('community', $posts); respond(201, ['message' => 'Your update is now visible in Care Circle.', 'post' => $post]);
+    $posts = readRows('community'); $posts[] = $post; saveRows('community', $posts);
+    saveMemberAction('care-circle-update', $owner, $pet, ['action' => 'update added', 'postId' => $post['id'], 'topic' => $post['topic']]);
+    respond(201, ['message' => 'Your update is now visible in Care Circle.', 'post' => $post]);
 }
 
 if ($path === '/api/public-lesson' && $method === 'GET') {
-    $postId = clean($_GET['postId'] ?? '', 100); $posts = array_merge(readRows('community'), defaultCommunity());
+    $postId = clean($_GET['postId'] ?? '', 100); $posts = communityRows();
     foreach ($posts as $post) if (($post['id'] ?? '') === $postId) {
         $pet = ['dogName' => preg_replace('/[’\']s family$/u', '', (string)$post['dogName']), 'species' => str_contains(strtolower((string)$post['topic']), 'litter') ? 'cat' : 'pet', 'breed' => 'profile shared privately', 'ageYears' => 'senior'];
         $topic = topicFrom((string)$post['body'] . ' ' . (string)$post['topic']);
@@ -539,7 +890,53 @@ if ($path === '/api/community-action' && $method === 'POST') {
     $rows = readRows('community-actions'); $key = $owner['id'] . ':' . $postId . ':' . $action; $exists = false;
     foreach ($rows as $index => $row) if (($row['key'] ?? '') === $key) { unset($rows[$index]); $exists = true; }
     if (!$exists) $rows[] = ['key' => $key, 'memberId' => $owner['id'], 'postId' => $postId, 'action' => $action, 'createdAt' => gmdate('c')];
-    saveRows('community-actions', $rows); respond(200, ['active' => !$exists]);
+    saveRows('community-actions', $rows);
+    saveMemberAction('care-circle-action', $owner, [], ['action' => $action . ($exists ? ' removed' : ' added'), 'postId' => $postId]);
+    respond(200, ['active' => !$exists]);
+}
+
+if ($path === '/api/community-research' && $method === 'GET') {
+    $owner = requireMember(); $petId = clean($_GET['dogId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(404, ['error' => 'We could not find that pet account.']);
+    $today = gmdate('Y-m-d'); $history = []; $used = 0;
+    foreach (readRows('community-research-queries') as $item) {
+        if (($item['memberId'] ?? '') !== $owner['id']) continue;
+        $history[] = $item;
+        if (str_starts_with((string)($item['createdAt'] ?? ''), $today)) $used++;
+    }
+    usort($history, fn($a, $b) => strcmp((string)($b['createdAt'] ?? ''), (string)($a['createdAt'] ?? '')));
+    respond(200, ['quota' => ['limit' => 3, 'used' => $used, 'remaining' => max(0, 3 - $used)], 'history' => array_slice($history, 0, 8)]);
+}
+
+if ($path === '/api/community-research' && $method === 'POST') {
+    $input = inputBody(); $owner = requireMember($input); $petId = clean($input['dogId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(404, ['error' => 'We could not find that pet account.']);
+    $query = clean($input['query'] ?? '', 180); $species = strtolower(clean($input['species'] ?? '', 12));
+    $publicFacebookUrl = clean($input['publicFacebookUrl'] ?? '', 500);
+    if (strlen($query) < 3) respond(422, ['error' => 'Write the topic or question you want to research.']);
+    if (!in_array($species, ['dog', 'cat', 'all'], true)) respond(422, ['error' => 'Choose dog, cat, or both.']);
+    if ($publicFacebookUrl !== '') {
+        $validUrl = filter_var($publicFacebookUrl, FILTER_VALIDATE_URL);
+        $scheme = strtolower((string)parse_url($publicFacebookUrl, PHP_URL_SCHEME));
+        if (!$validUrl || !in_array($scheme, ['http', 'https'], true)) respond(422, ['error' => 'Use a complete public link, including https://, or leave it blank.']);
+    }
+    $today = gmdate('Y-m-d'); $rows = readRows('community-research-queries');
+    $used = count(array_filter($rows, fn($item) => ($item['memberId'] ?? '') === $owner['id'] && str_starts_with((string)($item['createdAt'] ?? ''), $today)));
+    if ($used >= 3) respond(429, ['error' => 'You have used today’s three free research requests. Try again tomorrow.']);
+    $brief = communityResearchBrief($query, $species); $now = gmdate('c');
+    $item = [
+        'id' => id('research'), 'memberId' => $owner['id'], 'dogId' => $petId, 'query' => $query,
+        'species' => $species, 'publicFacebookUrl' => $publicFacebookUrl,
+        'sourceScope' => 'reddit_and_public_facebook', 'status' => 'source_access_pending',
+        'brief' => $brief, 'createdAt' => $now,
+    ];
+    $rows[] = $item; saveRows('community-research-queries', $rows);
+    saveMemberAction('community-research-request', $owner, $pet, ['action' => 'research brief saved', 'species' => $species]);
+    respond(201, [
+        'message' => 'Your research brief is saved in your account.', 'brief' => $brief,
+        'quota' => ['limit' => 3, 'used' => $used + 1, 'remaining' => 2 - $used],
+        'sourceStatus' => 'Public-source access is being configured. This request has not read Reddit or Facebook content, and it never searches private groups.',
+    ]);
 }
 
 // Daily check-in, notifications, memories, and media.
@@ -552,10 +949,98 @@ if ($path === '/api/checkin' && $method === 'GET') {
 if ($path === '/api/checkin' && $method === 'POST') {
     $input = inputBody(); $owner = requireMember($input); $petId = clean($input['dogId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
     if (!$pet) respond(404, ['error' => 'We could not find that pet profile.']);
-    $item = ['id' => id('checkin'), 'memberId' => $owner['id'], 'dogId' => $petId, 'sleep' => clean($input['sleep'] ?? '', 50), 'movement' => clean($input['movement'] ?? '', 50), 'appetite' => clean($input['appetite'] ?? '', 50), 'note' => clean($input['note'] ?? $input['observation'] ?? '', 700), 'day' => clean($input['day'] ?? gmdate('Y-m-d'), 30), 'createdAt' => gmdate('c')];
+    $item = ['id' => id('checkin'), 'memberId' => $owner['id'], 'dogId' => $petId, 'sleep' => clean($input['sleep'] ?? '', 50), 'mobility' => clean($input['mobility'] ?? '', 50), 'appetite' => clean($input['appetite'] ?? '', 50), 'note' => clean($input['note'] ?? $input['observation'] ?? '', 700), 'day' => clean($input['day'] ?? gmdate('Y-m-d'), 30), 'createdAt' => gmdate('c')];
     $rows = readRows('checkins'); $rows[] = $item; saveRows('checkins', $rows);
-    $summary = $pet['dogName'] . '’s day: movement ' . ($item['movement'] ?: 'not recorded') . ', appetite ' . ($item['appetite'] ?: 'not recorded') . ', sleep ' . ($item['sleep'] ?: 'not recorded') . '.';
+    $summary = $pet['dogName'] . '’s day: movement ' . ($item['mobility'] ?: 'not recorded') . ', appetite ' . ($item['appetite'] ?: 'not recorded') . ', sleep ' . ($item['sleep'] ?: 'not recorded') . '.';
+    saveMemberAction('daily-glance-saved', $owner, $pet, ['action' => 'daily glance saved', 'status' => $item['day']]);
     respond(201, ['checkin' => $item, 'message' => 'Today’s note was saved.', 'summary' => $summary]);
+}
+
+if ($path === '/api/meetups' && $method === 'GET') {
+    $owner = requireMember(); $petId = clean($_GET['petId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(401, ['error' => 'Enroll your pet before opening meetup matching.']);
+    $contextCount = meetupContextCount($owner['id'], $petId); $profile = meetupProfile($owner['id'], $petId);
+    respond(200, [
+        'profile' => meetupProfileResponse($profile), 'matches' => $profile ? meetupMatches($profile, $owner['id']) : [],
+        'contextCount' => $contextCount, 'requiredContextCount' => 3, 'unlocked' => $contextCount >= 3,
+    ]);
+}
+
+if ($path === '/api/meetups' && $method === 'POST') {
+    $input = inputBody(); $owner = requireMember($input); $petId = clean($input['petId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(401, ['error' => 'Enroll your pet before using meetup matching.']);
+    $contextCount = meetupContextCount($owner['id'], $petId);
+    if ($contextCount < 3) respond(403, ['error' => 'Save ' . (3 - $contextCount) . ' more check-in or lesson before Wednesday matching opens.']);
+    $action = clean($input['action'] ?? '', 20);
+
+    switch ($action) {
+        case 'profile':
+            $city = clean($input['city'] ?? '', 80); $region = clean($input['region'] ?? '', 80); $country = strtoupper(clean($input['country'] ?? '', 2));
+            $radiusMiles = max(2, min(50, (int)($input['radiusMiles'] ?? 10)));
+            $choiceFields = [
+                'sizeBand' => ['small', 'medium', 'large', 'extra-large'],
+                'energyLevel' => ['low', 'moderate', 'high'],
+                'temperament' => ['social', 'selective', 'prefers-space'],
+                'mobilityNeeds' => ['typical', 'gentle', 'limited'],
+                'playStyle' => ['quiet-company', 'parallel-walk', 'gentle-play', 'active-play'],
+                'availability' => ['weekday-morning', 'weekday-evening', 'weekend-morning', 'weekend-afternoon'],
+                'venuePreference' => ['quiet-park', 'walking-route', 'pet-friendly-cafe', 'private-yard'],
+                'ownerGoal' => ['gentle-social-time', 'walking-companion', 'shared-care-experience', 'pet-friendship'],
+            ];
+            $choices = [];
+            foreach ($choiceFields as $field => $allowed) {
+                $choices[$field] = clean($input[$field] ?? '', 40);
+                if (!in_array($choices[$field], $allowed, true)) respond(422, ['error' => 'Complete each matching field so we can protect the fit.']);
+            }
+            if ($city === '' || $region === '' || !in_array($country, ['US', 'CA'], true)) respond(422, ['error' => 'Complete each matching field so we can protect the fit.']);
+            $profiles = readRows('meetup-profiles'); $existing = meetupProfile($owner['id'], $petId); $now = gmdate('c');
+            $profile = [
+                'id' => $existing['id'] ?? id('meetup_profile'), 'memberId' => $owner['id'], 'petId' => $petId,
+                'city' => $city, 'region' => $region, 'country' => $country, 'radiusMiles' => $radiusMiles,
+                'mixedSpeciesOk' => !empty($input['mixedSpeciesOk']), 'sizeBand' => $choices['sizeBand'],
+                'energyLevel' => $choices['energyLevel'], 'temperament' => $choices['temperament'],
+                'mobilityNeeds' => $choices['mobilityNeeds'], 'playStyle' => $choices['playStyle'],
+                'availability' => $choices['availability'], 'venuePreference' => $choices['venuePreference'],
+                'ownerGoal' => $choices['ownerGoal'], 'safetyNotes' => clean($input['safetyNotes'] ?? '', 500),
+                'active' => true, 'createdAt' => $existing['createdAt'] ?? $now, 'updatedAt' => $now,
+            ];
+            $replaced = false;
+            foreach ($profiles as $index => $row) if (($row['memberId'] ?? '') === $owner['id'] && ($row['petId'] ?? '') === $petId) { $profiles[$index] = $profile; $replaced = true; break; }
+            if (!$replaced) $profiles[] = $profile;
+            saveRows('meetup-profiles', $profiles);
+            saveMemberAction('wednesday-match-profile-saved', $owner, $pet, ['action' => 'matching profile saved', 'city' => $city, 'region' => $region, 'country' => $country]);
+            respond(200, ['message' => 'Matching preferences saved.', 'profile' => meetupProfileResponse($profile)]);
+
+        case 'match':
+            respond(409, ['error' => 'Profiles are reviewed offline each Wednesday. If there is a careful fit, the WoafMeow team will send the introduction by email.']);
+
+        case 'feedback':
+            $profile = meetupProfile($owner['id'], $petId); $matchId = clean($input['matchId'] ?? '', 100); $match = null;
+            if (!$profile) respond(422, ['error' => 'Save meetup preferences before sharing feedback.']);
+            foreach (readRows('meetup-matches') as $item) if (($item['id'] ?? '') === $matchId && (($item['profileAId'] ?? '') === $profile['id'] || ($item['profileBId'] ?? '') === $profile['id'])) { $match = $item; break; }
+            if (!$match) respond(403, ['error' => 'That match is not connected to this pet.']);
+            $ratings = [];
+            foreach (['comfortRating', 'energyFitRating', 'ownerFitRating', 'safetyRating'] as $field) {
+                $raw = $input[$field] ?? null; $rating = (int)$raw;
+                if (!is_numeric($raw) || (float)$raw !== (float)$rating || $rating < 1 || $rating > 5) respond(422, ['error' => 'Rate each part from 1 to 5.']);
+                $ratings[$field] = $rating;
+            }
+            $feedback = readRows('meetup-feedback'); $item = [
+                'id' => id('meetup_feedback'), 'matchId' => $matchId, 'memberId' => $owner['id'],
+                'comfortRating' => $ratings['comfortRating'], 'energyFitRating' => $ratings['energyFitRating'],
+                'ownerFitRating' => $ratings['ownerFitRating'], 'safetyRating' => $ratings['safetyRating'],
+                'meetAgain' => !empty($input['meetAgain']), 'notes' => clean($input['notes'] ?? '', 600), 'createdAt' => gmdate('c'),
+            ];
+            $replaced = false;
+            foreach ($feedback as $index => $row) if (($row['matchId'] ?? '') === $matchId && ($row['memberId'] ?? '') === $owner['id']) { $item['id'] = $row['id'] ?? $item['id']; $feedback[$index] = $item; $replaced = true; break; }
+            if (!$replaced) $feedback[] = $item;
+            saveRows('meetup-feedback', $feedback);
+            saveMemberAction('wednesday-match-feedback-saved', $owner, $pet, ['action' => 'match feedback saved', 'matchId' => $matchId, 'result' => $item['meetAgain'] ? 'meet again' : 'do not meet again']);
+            respond(200, ['message' => 'Feedback saved. It will change how the next match is ranked.']);
+
+        default:
+            respond(422, ['error' => 'Choose a meetup action.']);
+    }
 }
 
 if ($path === '/api/notifications' && $method === 'GET') {
@@ -565,7 +1050,7 @@ if ($path === '/api/notifications' && $method === 'GET') {
     respond(200, ['notifications' => array_reverse($items), 'unreadCount' => count(array_filter($items, fn($item) => empty($item['isRead'])))]);
 }
 
-if ($path === '/api/notifications' && $method === 'POST') {
+if ($path === '/api/notifications' && in_array($method, ['POST', 'PATCH'], true)) {
     $input = inputBody(); $owner = requireMember($input); $rows = readRows('notifications');
     foreach ($rows as $index => $item) if (($item['memberId'] ?? '') === $owner['id']) { $item['isRead'] = true; $rows[$index] = $item; }
     saveRows('notifications', $rows); respond(200, ['message' => 'Notifications marked as read.']);
@@ -579,15 +1064,20 @@ if ($path === '/api/memories' && $method === 'GET') {
 
 if ($path === '/api/memories' && $method === 'POST') {
     $input = inputBody(); $owner = requireMember($input); $petId = clean($input['dogId'] ?? '', 100);
-    if (!ownedPet($petId, $owner['id'])) respond(404, ['error' => 'We could not find that pet profile.']);
+    $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(404, ['error' => 'We could not find that pet profile.']);
     $item = ['id' => id('memory'), 'memberId' => $owner['id'], 'dogId' => $petId, 'title' => clean($input['title'] ?? '', 120), 'story' => clean($input['story'] ?? '', 1400), 'mediaId' => clean($input['mediaId'] ?? '', 100), 'createdAt' => gmdate('c')];
     if (!$item['title'] || !$item['story']) respond(422, ['error' => 'Add a title and the moment you want to remember.']);
-    $rows = readRows('memories'); $rows[] = $item; saveRows('memories', $rows); respond(201, ['memory' => $item, 'message' => 'This moment was saved.']);
+    $rows = readRows('memories'); $rows[] = $item; saveRows('memories', $rows);
+    saveMemberAction('private-memory-saved', $owner, $pet, ['action' => 'private memory saved', 'hasMedia' => $item['mediaId'] !== '' ? 'yes' : 'no']);
+    respond(201, ['memory' => $item, 'message' => 'This moment was saved.']);
 }
 
 if ($path === '/api/media' && $method === 'POST') {
     $memberId = clean($_POST['memberId'] ?? '', 100); $token = clean($_POST['memberToken'] ?? '', 180); $owner = authenticatedMember(['memberId' => $memberId, 'memberToken' => $token]);
     if (!$owner) respond(401, ['error' => 'Please sign in again.']);
+    $petId = clean($_POST['dogId'] ?? '', 100); $pet = ownedPet($petId, $owner['id']);
+    if (!$pet) respond(404, ['error' => 'We could not find that pet profile.']);
     if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) respond(422, ['error' => 'Choose a photo, video, or audio file.']);
     $file = $_FILES['file'];
     if ((int)$file['size'] > 20 * 1024 * 1024) respond(413, ['error' => 'Keep uploads under 20 MB.']);
@@ -598,8 +1088,10 @@ if ($path === '/api/media' && $method === 'POST') {
     $target = $mediaDir . '/' . $mediaId . '.' . $allowed[$mime];
     if (!move_uploaded_file($file['tmp_name'], $target)) respond(503, ['error' => 'We could not save that file.']);
     $kind = str_starts_with($mime, 'image/') ? 'image' : (str_starts_with($mime, 'video/') ? 'video' : 'audio');
-    $item = ['id' => $mediaId, 'memberId' => $owner['id'], 'dogId' => clean($_POST['dogId'] ?? '', 100), 'path' => $target, 'mimeType' => $mime, 'mediaKind' => $kind, 'createdAt' => gmdate('c')];
-    $rows = readRows('media'); $rows[] = $item; saveRows('media', $rows); respond(201, ['media' => $item]);
+    $item = ['id' => $mediaId, 'memberId' => $owner['id'], 'dogId' => $petId, 'path' => $target, 'mimeType' => $mime, 'mediaKind' => $kind, 'createdAt' => gmdate('c')];
+    $rows = readRows('media'); $rows[] = $item; saveRows('media', $rows);
+    saveMemberAction('care-media-uploaded', $owner, $pet, ['action' => 'media uploaded', 'status' => $kind, 'hasMedia' => 'yes']);
+    respond(201, ['media' => $item]);
 }
 
 if (preg_match('#^/api/media/([A-Za-z0-9_]+)$#', $path, $matches) && $method === 'GET') {
@@ -652,14 +1144,24 @@ if (isset($formRoutes[$path]) && $method === 'POST') {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) respond(422, ['error' => 'Enter a valid email address.']);
     $record = [];
     foreach ($input as $key => $value) if (is_scalar($value)) $record[clean($key, 60)] = clean($value, 1000);
+    $record['id'] = id('submission');
     $record['email'] = $email; saveSubmission($formRoutes[$path], $record);
-    respond(201, ['message' => $path === '/api/newsletter' ? 'You are on the WoafMeow care list.' : 'Thank you. We saved your information and will follow up.']);
+    if ($path === '/api/newsletter') {
+        $delivery = sendGuideEmail($email);
+        $log = readRows('notification-log');
+        $log[] = ['id' => id('notification'), 'submissionId' => $record['id'] ?? '', 'type' => 'senior-dog-guide-delivery', 'email' => $email, 'status' => $delivery['status'], 'detail' => $delivery['detail'], 'createdAt' => gmdate('c')];
+        if (count($log) > 5000) $log = array_slice($log, -5000);
+        saveRows('notification-log', $log);
+        if ($delivery['status'] !== 'sent') respond(503, ['error' => 'We saved your address but could not deliver the guide. Please try again.']);
+        respond(201, ['message' => 'The complete Senior Dog Care Guide has been emailed to you.']);
+    }
+    respond(201, ['message' => 'Thank you. We saved your information and will follow up.']);
 }
 
 if ($path === '/api/admin' && $method === 'GET') {
     $key = clean($_SERVER['HTTP_X_WOAFY_ADMIN_KEY'] ?? '', 200); $expected = getenv('ADMIN_DASHBOARD_KEY') ?: '';
     if (!$expected || !$key || !hash_equals($expected, $key)) respond(401, ['error' => 'Admin access required.']);
-    respond(200, ['members' => readRows('members'), 'submissions' => array_reverse(readRows('submissions')), 'orders' => array_reverse(readRows('orders')), 'products' => array_values(productCatalog())]);
+    respond(200, ['members' => readRows('members'), 'submissions' => array_reverse(readRows('submissions'))]);
 }
 
 respond(404, ['error' => 'That WoafMeow service is not available yet.']);
