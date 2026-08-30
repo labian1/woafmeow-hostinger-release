@@ -52,13 +52,22 @@ The profile and clinic images below are byte-identical copies of the source-labe
 | `cornell-nutrition.jpg` | Cornell Nutrition Service | [Cornell University](https://www.vet.cornell.edu/hospitals/services/nutrition) | Preview only; source and permissions recheck | `914509b80d903d43ceaa046dbfc62e7ea62295779b00e6843ed6e70e5b90ac8c` |
 | `christopher-frye.jpg` | Christopher Frye, DVM, DACVSMR | [Cornell University](https://www.vet.cornell.edu/hospitals/services/sports-medicine-and-rehabilitation/companion-animal-hospital-sports-medicine-and-rehabilitation-meet-our-specialists) | Preview only; source and permissions recheck | `2087969ad69a9f3a146bf7214ac827e0fd4b49f7a2fc1902b0d6ac66f00ccd39` |
 
-### Expanded BluePearl profiles — official images not cleared for reuse
+### Expanded BluePearl profiles — facility images not cleared for reuse
 
 On 2026-08-19, the 89 official BluePearl hospital pages referenced by `data/find-care-profiles.expanded.json` were checked individually in a browser. All 89 pages published a unique HTTPS `og:image`, a matching `twitter:image`, and positive declared image dimensions. Official alt text or asset filenames made 87 images facility/location candidates; the Frederick and Birmingham pages unambiguously used clinical-care photographs instead. An `og:image` is page metadata, not a reuse license, and those two clinical photographs must not be presented as facility photos.
 
 BluePearl's current [Terms & Conditions](https://bluepearlvet.com/terms-conditions-bluepearl/) state that site photographs and other content are owned by BluePearl or used with permission. The terms prohibit incorporating that content into another website or publicly redistributing it without a license, and require written permission for deep links beyond the BluePearl home page. They also restrict automated or manual monitoring/copying without written permission. Technical accessibility, robots.txt allowance, or successful hotlinking does not grant image rights.
 
-No BluePearl image was downloaded, cached, staged, or added to the expanded profile data. Until written permission covers both the hospital-detail links and imagery, use no BluePearl media. The safest truthful card treatment is either text-only/owned iconography or locally licensed editorial veterinary photography visibly labeled as a representative image; never imply that a representative photograph depicts the named provider, team, or facility. The current generator's rotated editorial photographs are representative, not BluePearl-published location images, and their own production licenses still require the checks documented above.
+No BluePearl facility or clinical photograph was downloaded, cached, staged, or added to the expanded profile data. Never imply that a representative photograph depicts a named provider, team, or facility. The directory uses only the official BluePearl brand mark documented below to identify the organization; that mark is not a facility photograph, clinical endorsement, or grant of trademark rights.
+
+## Official organization marks used for source identification
+
+These marks identify the organization that published each linked profile. They do not depict a named hospital, team member, or facility and do not imply endorsement by the organization or by WoafMeow. Recheck trademark and reuse requirements before any paid distribution.
+
+| Asset | Dimensions | Official source | Use | SHA-256 |
+| --- | ---: | --- | --- | --- |
+| `vca-official-brand.webp` | 800×349 | [VCA Animal Hospitals official site image](https://vcahospitals.com/-/media/2/vca/images/global/vca-logo_alert-banner3.jpg?rev=3e801520206247d4b7de36fe073cb810&extension=webp&hash=1F28A9C5C2CF200D20ACE1C1DFCDC850) | Organization identification on VCA official-profile cards only | `6ab653242e53b51ea2d9df4223212410ca56ac2b3b24739997267b7c5eb9e3da` |
+| `bluepearl-official-brand.png` | 512×512 | [BluePearl Pet Hospital official site icon](https://bluepearlvet.com/wp-content/uploads/2022/10/cropped-favicon.png) | Organization identification on BluePearl official-profile cards only | `e0517592a1f42deec2f1727f9727928596578d843ab8fc841f391868464f4247` |
 
 ## Staged-copy integrity hashes
 
