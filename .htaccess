@@ -2,11 +2,7 @@ Options -Indexes
 DirectoryIndex index.html
 RewriteEngine On
 
-# Keep legacy campaign and Care Circle links working after the Hostinger move.
-RewriteRule ^senior-care-platform/?(.*)$ /$1 [R=301,L]
-RewriteRule ^care-circle/?$ /community/ [R=301,L]
-
-# Preserve real files and route directories generated for WoafMeow.
+# Preserve real files and generated route directories.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
