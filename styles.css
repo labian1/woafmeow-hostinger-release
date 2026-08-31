@@ -21,6 +21,152 @@
   --shadow: 0 18px 50px rgba(64, 53, 47, 0.1);
 }
 
+/* Clinical-safety hierarchy: triage comes before tracking. */
+.guide-mobile-triage,
+.lesson-mobile-triage {
+  display: none !important;
+}
+
+html body.guide-v8 .guide-triage-first,
+html body.lesson-v9 .lesson-triage-v9,
+html body.health-v1 .health-triage-first {
+  color: #fffaf5 !important;
+  background: #8c3425 !important;
+}
+
+html body.guide-v8 .guide-triage-first .wm-wrap,
+html body.lesson-v9 .lesson-triage-v9 .wm-wrap {
+  display: grid !important;
+  grid-template-columns: minmax(210px, 0.72fr) minmax(360px, 1.7fr) auto !important;
+  align-items: center !important;
+  gap: 26px !important;
+  max-width: 1240px !important;
+  padding-block: 26px !important;
+}
+
+html body.guide-v8 .guide-triage-first span,
+html body.lesson-v9 .lesson-triage-v9 span {
+  display: block !important;
+  margin-bottom: 5px !important;
+  color: #ffd2bf !important;
+  font-size: 0.75rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.14em !important;
+}
+
+html body.guide-v8 .guide-triage-first h2,
+html body.lesson-v9 .lesson-triage-v9 h2 {
+  margin: 0 !important;
+  color: inherit !important;
+  font-size: clamp(1.55rem, 2.4vw, 2.25rem) !important;
+  line-height: 1.05 !important;
+}
+
+html body.guide-v8 .guide-triage-first p,
+html body.lesson-v9 .lesson-triage-v9 p {
+  max-width: none !important;
+  margin: 0 !important;
+  color: #fffaf5 !important;
+  font-size: 0.98rem !important;
+  line-height: 1.55 !important;
+}
+
+html body.guide-v8 .guide-triage-first .button,
+html body.lesson-v9 .lesson-triage-v9 .button {
+  border-color: #fffaf5 !important;
+  color: #4a241c !important;
+  background: #fffaf5 !important;
+  white-space: nowrap !important;
+}
+
+html body.guide-v8 .guide-method-safety {
+  margin: 12px 0 18px !important;
+  padding: 14px 16px !important;
+  border-left: 4px solid #ba4a31 !important;
+  color: #3e2f29 !important;
+  background: #f6e6dc !important;
+  line-height: 1.5 !important;
+}
+
+html body.health-v1 .health-triage-first {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 18px !important;
+  margin: 0 !important;
+  padding: 20px clamp(22px, 4vw, 54px) !important;
+}
+
+html body.health-v1 .health-triage-first strong {
+  font-family: Georgia, serif !important;
+  font-size: 1.25rem !important;
+}
+
+html body.health-v1 .health-triage-first p {
+  margin: 0 !important;
+  color: inherit !important;
+  line-height: 1.45 !important;
+}
+
+html body.health-v1 .health-triage-first a {
+  color: #fffaf5 !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+
+html body.home-v17 .home-insight-metrics,
+html body.bed-v7 .metric-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 900px) {
+  html body.guide-v8 .guide-triage-first .wm-wrap,
+  html body.lesson-v9 .lesson-triage-v9 .wm-wrap,
+  html body.health-v1 .health-triage-first {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  html body.home-v17 .home-insight-metrics,
+  html body.bed-v7 .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  html body.guide-v8 .guide-mobile-triage,
+  html body.lesson-v9 .lesson-mobile-triage {
+    display: grid !important;
+    gap: 4px !important;
+    margin: 16px 0 !important;
+    padding: 14px 16px !important;
+    border: 1px solid #a74431 !important;
+    border-radius: 12px !important;
+    color: #fffaf5 !important;
+    background: #8c3425 !important;
+    text-decoration: none !important;
+  }
+
+  html body.guide-v8 .guide-mobile-triage strong,
+  html body.lesson-v9 .lesson-mobile-triage strong {
+    color: inherit !important;
+    font-size: 1rem !important;
+    line-height: 1.25 !important;
+  }
+
+  html body.guide-v8 .guide-mobile-triage span,
+  html body.lesson-v9 .lesson-mobile-triage span {
+    color: #ffe8dd !important;
+    font-size: 0.88rem !important;
+    line-height: 1.4 !important;
+  }
+
+  html body.home-v17 .home-insight-metrics,
+  html body.bed-v7 .metric-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* 2026-08-26.3 — complete product, guide, profile and private-lesson contract. */
 html body main :is(h1, h2) {
   max-width: none;
@@ -24942,6 +25088,26 @@ html body.memorial-v7 .tree-secure-note {
   }
 
   html body.memorial-v7 .tree-purchase-dialog form .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Keep all five Smart Base signals visible without compressing the labels. */
+html body.home-v17 .home-insight-metrics,
+html body.bed-v7 .metric-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 900px) {
+  html body.home-v17 .home-insight-metrics,
+  html body.bed-v7 .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  html body.home-v17 .home-insight-metrics,
+  html body.bed-v7 .metric-grid {
     grid-template-columns: 1fr !important;
   }
 }

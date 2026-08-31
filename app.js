@@ -1818,19 +1818,19 @@
       ],
       breathing: [
         [
-          `For ${pet}, describe the breathing change before trying to label its cause. ${clinicalContext}`,
+          `For ${pet}, contact the veterinary team before building a breathing record. ${clinicalContext}`,
           [
-            `Record whether the change happens at rest, during sleep or after activity.`,
-            `Count resting breaths for one full minute only while ${pet} is calm.`,
-            `Note cough sound, effort, gum color, posture and recovery time.`,
+            `Call today for a new or repeated cough at rest and report whether breathing looks harder or faster.`,
+            `Seek emergency care now for breathing difficulty, blue, gray or pale gums, collapse, inability to settle or severe distress.`,
+            `Do not wait for a complete log or recreate the symptom before calling.`,
           ],
         ],
         [
-          `Reduce exertion and keep ${pet} calm while you contact the veterinary team.`,
+          `If ${pet} is stable and the veterinary team agrees, add one brief natural observation.`,
           [
             `Move ${pet} to a cool, quiet space with easy access to water.`,
             `Avoid exercise, neck pressure and repeated breathing tests.`,
-            `Take a short natural video if doing so does not delay care.`,
+            `Take a short natural video or resting-breath count only if doing so does not delay care.`,
           ],
         ],
         [
@@ -2968,9 +2968,8 @@
     const query = (search?.value || "").trim().toLocaleLowerCase();
     const selectedCategory = category?.value || "all";
     const selectedRegion = region?.value || "all";
-    let matchingProfiles = 0;
-    let matchingResources = 0;
-
+    const matchingProfileItems = [];
+    const matchingResourceItems = [];
     items.forEach((item) => {
       const matches = itemMatches(
         item,
@@ -2978,17 +2977,34 @@
         selectedCategory,
         selectedRegion,
       );
-      let visible = matches;
-      if (matches && item.hasAttribute("data-directory-profile")) {
-        matchingProfiles += 1;
-        visible = matchingProfiles <= profileLimit;
-      }
-      if (matches && item.hasAttribute("data-directory-resource")) {
-        matchingResources += 1;
-        visible = matchingResources <= resourceLimit;
-      }
-      item.hidden = !visible;
+      item.hidden = true;
+      if (!matches) return;
+      if (item.hasAttribute("data-directory-profile"))
+        matchingProfileItems.push(item);
+      else if (item.hasAttribute("data-directory-resource"))
+        matchingResourceItems.push(item);
     });
+
+    const matchingProfiles = matchingProfileItems.length;
+    const matchingResources = matchingResourceItems.length;
+    const perOrganizationLimit = Math.max(3, Math.ceil(profileLimit / 3));
+    const organizationCounts = new Map();
+    let visibleProfiles = 0;
+    matchingProfileItems.forEach((item) => {
+      if (visibleProfiles >= profileLimit) return;
+      const organization = (item.dataset.organization || "Other")
+        .trim()
+        .toLocaleLowerCase();
+      const organizationCount = organizationCounts.get(organization) || 0;
+      if (organizationCount >= perOrganizationLimit) return;
+      organizationCounts.set(organization, organizationCount + 1);
+      visibleProfiles += 1;
+      item.hidden = false;
+    });
+    const visibleResources = Math.min(resourceLimit, matchingResources);
+    matchingResourceItems
+      .slice(0, visibleResources)
+      .forEach((item) => (item.hidden = false));
 
     if (profileCount)
       profileCount.textContent = resultLabel(
@@ -3012,10 +3028,10 @@
     if (resourceEmpty) resourceEmpty.hidden = matchingResources !== 0;
     if (loadMore) {
       const remaining =
-        Math.max(0, matchingProfiles - profileLimit) +
-        Math.max(0, matchingResources - resourceLimit);
+        Math.max(0, matchingProfiles - visibleProfiles) +
+        Math.max(0, matchingResources - visibleResources);
       loadMore.hidden = remaining === 0;
-      loadMore.textContent = "Search more →";
+      loadMore.textContent = "Show more providers →";
     }
 
     filterButtons.forEach((button) => {
