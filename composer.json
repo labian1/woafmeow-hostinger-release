@@ -1,0 +1,14 @@
+{
+  "name": "woafmeow/hostinger-release",
+  "description": "Static WoafMeow Hostinger release promoter",
+  "type": "project",
+  "require": {},
+  "scripts": {
+    "post-install-cmd": [
+      "@php deploy-to-public-root.php"
+    ],
+    "post-update-cmd": [
+      "@php deploy-to-public-root.php"
+    ]
+  }
+}
