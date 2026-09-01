@@ -1,3 +1,33 @@
+const WOAFMEOW_OWNER_ACTIVITY_API =
+  "https://woafypet-senior-care-8kt.pages.dev/api/activity";
+const notifyWoafMeowOwner = async (eventType, account = null, properties = {}) => {
+  const identity = account || (() => {
+    try {
+      return JSON.parse(localStorage.getItem("woafmeow-account-v1") || "null");
+    } catch {
+      return null;
+    }
+  })();
+  if (!identity?.email) return false;
+  try {
+    const response = await fetch(WOAFMEOW_OWNER_ACTIVITY_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        eventType,
+        email: identity.email,
+        ownerName: identity.ownerName,
+        petName: identity.petName,
+        properties: { page_path: window.location.pathname, ...properties },
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
 (() => {
   const toggle = document.querySelector("[data-menu-toggle]");
   const navigation = document.querySelector("[data-site-nav]");
@@ -736,6 +766,13 @@
         saved.liked = !saved.liked;
         save();
         render();
+        void notifyWoafMeowOwner(
+          saved.liked
+            ? "care_circle_reaction_added"
+            : "care_circle_reaction_removed",
+          null,
+          { lesson_key: key },
+        );
       });
       commentsButton?.addEventListener("click", () => {
         if (!commentsPanel) return;
@@ -769,6 +806,9 @@
           commentCount.textContent = String(
             commentList?.querySelectorAll("article").length || 0,
           );
+        void notifyWoafMeowOwner("care_circle_comment_added", null, {
+          lesson_key: key,
+        });
       });
       render();
     });
@@ -836,7 +876,7 @@
         normalizedOwnerKey(lesson.ownerKey || lesson.email) ===
           normalizedOwnerKey(account.email),
     );
-  const removePublicLesson = (lessonId) => {
+  const removePublicLesson = async (lessonId) => {
     const id = String(lessonId || "");
     const lesson = getPublicLessons().find((item) => item?.id === id);
     if (!lessonBelongsToAccount(lesson)) return false;
@@ -850,6 +890,10 @@
         return false;
       }
     }
+    await notifyWoafMeowOwner("public_care_lesson_deleted", getAccount(), {
+      lesson_id: id,
+      lesson_slug: lesson.slug || "",
+    });
     return true;
   };
   const safeImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -1047,7 +1091,7 @@
   ];
   let pendingPetPhotoDataUrl = getAccount()?.petPhotoDataUrl || "";
   let editingAccount = false;
-  const publishProfileQuestion = (
+  const publishProfileQuestion = async (
     account,
     question,
     questionImageDataUrl = "",
@@ -1095,6 +1139,18 @@
       )
         return "";
     }
+    await notifyWoafMeowOwner(
+      publicQuestion.visibility === "public"
+        ? "public_care_lesson_created"
+        : "private_care_lesson_created",
+      account,
+      {
+        lesson_id: lessonId,
+        lesson_slug: slug,
+        visibility: publicQuestion.visibility,
+        has_photo: questionImageDataUrl ? "yes" : "no",
+      },
+    );
     return slug;
   };
   const accountNext = new URLSearchParams(window.location.search).get("next");
@@ -1189,14 +1245,14 @@
       remove.className = "text-button danger";
       remove.dataset.deletePublicLesson = lesson.id || "";
       remove.textContent = "Delete post";
-      remove.addEventListener("click", () => {
+      remove.addEventListener("click", async () => {
         if (
           !window.confirm(
             "Delete this public Care Circle post? This removes the post and its tailored lesson from this browser.",
           )
         )
           return;
-        if (!removePublicLesson(lesson.id)) {
+        if (!(await removePublicLesson(lesson.id))) {
           if (publicLessonsNote)
             publicLessonsNote.textContent =
               "This post could not be deleted. Please try again.";
@@ -1422,6 +1478,15 @@
       return;
     }
     pendingPetPhotoDataUrl = account.petPhotoDataUrl;
+    await notifyWoafMeowOwner(
+      previousAccount ? "care_account_updated" : "care_account_created",
+      account,
+      {
+        account_state: previousAccount ? "updated" : "created",
+        pet_age: account.petAge,
+        breed: account.breed,
+      },
+    );
     editingAccount = false;
     renderAccount();
     if (accountForm.matches("[data-home-account-form]")) {
@@ -1469,7 +1534,7 @@
 
   document
     .querySelectorAll("[data-home-question-form]")
-    .forEach((questionForm) => questionForm.addEventListener("submit", (event) => {
+    .forEach((questionForm) => questionForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       if (!form.reportValidity()) return;
@@ -1478,7 +1543,7 @@
         .slice(0, 500);
       const account = getAccount();
       if (account) {
-        const slug = publishProfileQuestion(account, question);
+        const slug = await publishProfileQuestion(account, question);
         if (slug) {
           window.location.assign(`/care-circle/${slug}/`);
           return;
@@ -1606,7 +1671,7 @@
         questionField?.focus({ preventScroll: true });
       });
     }
-    askForm.addEventListener("submit", (event) => {
+    askForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!askForm.reportValidity()) return;
       const values = Object.fromEntries(new FormData(askForm).entries());
@@ -1620,7 +1685,7 @@
         window.location.assign(target.href);
         return;
       }
-      const slug = publishProfileQuestion(
+      const slug = await publishProfileQuestion(
         account,
         question,
         pendingQuestionImageDataUrl,
@@ -2138,14 +2203,14 @@
       lessonBelongsToAccount(personalQuestion, currentCareProfile);
     if (ownerActions) ownerActions.hidden = !canDelete;
     if (canDelete && deleteButton) {
-      deleteButton.addEventListener("click", () => {
+      deleteButton.addEventListener("click", async () => {
         if (
           !window.confirm(
             "Delete this public Care Circle post? This removes the post and its tailored lesson from this browser.",
           )
         )
           return;
-        if (!removePublicLesson(personalQuestion.id)) {
+        if (!(await removePublicLesson(personalQuestion.id))) {
           if (deleteNote)
             deleteNote.textContent =
               "This post could not be deleted. Please try again.";
@@ -2613,6 +2678,10 @@
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 2000);
+      await notifyWoafMeowOwner("veterinary_email_draft_created", account, {
+        attachment_count: attached.length + 1,
+        timeline_range: timeline,
+      });
       setShareStatus(
         attached.length
           ? `Email draft downloaded with the care summary and ${attached.length} original health record${attached.length === 1 ? "" : "s"} attached. Open it in your email app and send.`
@@ -2661,6 +2730,9 @@
         payload.files = recordFiles;
       }
       await navigator.share(payload);
+      await notifyWoafMeowOwner("health_timeline_shared", account, {
+        shared_files: payload.files?.length || 0,
+      });
       setShareStatus(
         payload.files
           ? "Timeline and selected records shared."
@@ -2730,6 +2802,10 @@
       if (entry.kind === "record")
         await recordTransaction("readwrite", (store) => store.delete(entry.id));
       else writeLogs(readLogs().filter((item) => item.id !== entry.id));
+      await notifyWoafMeowOwner("health_timeline_entry_removed", account, {
+        entry_kind: entry.kind,
+        entry_date: entry.date || "",
+      });
       await render();
     });
     actions.append(remove);
@@ -2838,6 +2914,12 @@
           createdAt: new Date().toISOString(),
         }),
       );
+      await notifyWoafMeowOwner("health_record_saved", account, {
+        record_type: String(values.get("recordType") || "Other"),
+        record_date: String(values.get("recordDate") || today),
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+      });
       recordForm.reset();
       recordForm.elements.recordDate.value = today;
       recordNote.textContent =
@@ -2872,6 +2954,11 @@
     });
     try {
       writeLogs(logs);
+      await notifyWoafMeowOwner("health_timeline_change_saved", account, {
+        category: String(values.get("category") || "Other"),
+        severity: String(values.get("severity") || "Mild"),
+        change_date: String(values.get("logDate") || today),
+      });
       logForm.reset();
       logForm.elements.logDate.value = today;
       logNote.textContent = "Change added to the timeline.";
